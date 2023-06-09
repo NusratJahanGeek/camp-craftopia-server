@@ -9,7 +9,7 @@ app.use(cors());
 app.use(express.json());
 
 
-const { MongoClient, ServerApiVersion } = require('mongodb');
+const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.a81ulqy.mongodb.net/?retryWrites=true&w=majority`;
 
 // Create a MongoClient with a MongoClientOptions object to set the Stable API version
@@ -26,27 +26,52 @@ async function run() {
     // Connect the client to the server	(optional starting in v4.7)
     await client.connect();
 
+    const userCollection = client.db("campCraftopiaDB").collection("users");
     const classesCollection = client.db("campCraftopiaDB").collection("classes");
     const instructorsCollection = client.db("campCraftopiaDB").collection("instructors");
     const bookingCollection = client.db("campCraftopiaDB").collection("bookings");
     
-    // Classes API Handling
+    // Users Related APIs
+    app.post('/users', async(req, res) => {
+      const user = req.body;
+      const result = await userCollection.insertOne(user);
+      res.send(result);
+    })
+
+    // Classes Related APIs
     app.get('/classes', async(req, res) => {
         const result = await classesCollection.find().toArray();
         res.send(result);
     })
 
-    // Instructors API Handling
+    // Instructors Related APIs
     app.get('/instructors', async(req, res) => {
         const result = await instructorsCollection.find().toArray();
         res.send(result);
     })
 
-    // Bookings API Handling
+    // Bookings Related APIs
+    app.get('/bookings', async(req, res) => {
+      const email = req.query.email;
+      if(!email){
+        res.send([]);
+      }
+
+      const query = { email: email };
+      const result = await bookingCollection.find(query).toArray();
+      res.send(result);
+    });
+
     app.post('/bookings', async(req, res) => {
-      const item = req.body;
-      console.log(item);
-      const result = await bookingCollection.insertOne(item);
+      const classData = req.body;
+      const result = await bookingCollection.insertOne(classData);
+      res.send(result);
+    });
+
+    app.delete('/bookings/:id', async(req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const result = await bookingCollection.deleteOne(query);
       res.send(result);
     })
 
