@@ -27,17 +27,27 @@ async function run() {
     await client.connect();
 
     const classesCollection = client.db("campCraftopiaDB").collection("classes");
-
     const instructorsCollection = client.db("campCraftopiaDB").collection("instructors");
-
+    const bookingCollection = client.db("campCraftopiaDB").collection("bookings");
+    
+    // Classes API Handling
     app.get('/classes', async(req, res) => {
         const result = await classesCollection.find().toArray();
         res.send(result);
     })
 
+    // Instructors API Handling
     app.get('/instructors', async(req, res) => {
         const result = await instructorsCollection.find().toArray();
         res.send(result);
+    })
+
+    // Bookings API Handling
+    app.post('/bookings', async(req, res) => {
+      const item = req.body;
+      console.log(item);
+      const result = await bookingCollection.insertOne(item);
+      res.send(result);
     })
 
     // Send a ping to confirm a successful connection
