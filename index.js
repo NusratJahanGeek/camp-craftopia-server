@@ -1,6 +1,7 @@
 const express = require('express');
 const app = express();
 const cors = require('cors');
+const jwt = require('jsonwebtoken');
 require('dotenv').config()
 const port = process.env.PORT || 5000;
 
@@ -8,6 +9,22 @@ const port = process.env.PORT || 5000;
 app.use(cors());
 app.use(express.json());
 
+const verifyJWT = (req, res, next) => {
+  const authorization = req.headers.authorization;
+  if(!authorization){
+    return res.status(401).send({error: true, message: 'Unauthorized Access'})
+  }
+  // bearer token
+  const token = authorization.split(' ')[1];
+
+  jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (err, decoded) => {
+    if(err){
+      return res.status(401).send({ error: true, message: 'Unauthorized Access' })
+    }
+    req.decoded = decoded;
+    next();
+  })
+}
 
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.a81ulqy.mongodb.net/?retryWrites=true&w=majority`;
@@ -30,7 +47,19 @@ async function run() {
     const classesCollection = client.db("campCraftopiaDB").collection("classes");
     const instructorsCollection = client.db("campCraftopiaDB").collection("instructors");
     const bookingCollection = client.db("campCraftopiaDB").collection("bookings");
-    
+    // Token Related APIs
+app.post('/jwt', (req, res) => {
+  const user = req.body;
+  try {
+    const token = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, { expiresIn: '1h' });
+    res.send({ token });
+  } catch (error) {
+    console.error('Failed to generate access token:', error);
+    res.status(500).send({ error: true, message: 'Failed to generate access token' });
+  }
+});
+
+
     // Users Related APIs
     app.get('/users', async(req, res) => {
       const result = await userCollection.find().toArray();
@@ -74,12 +103,12 @@ async function run() {
       res.send(result);
     });
 
-    app.patch('/users/user/:id', async(req, res) => {
+    app.patch('/users/student/:id', async(req, res) => {
       const id = req.params.id;
       const filter = {_id: new ObjectId(id)};
       const updateRole = {
         $set: {
-          role: 'user'
+          role: 'student'
         },
       };
 
@@ -107,12 +136,17 @@ async function run() {
     })
 
     // Bookings Related APIs
-    app.get('/bookings', async(req, res) => {
+    app.get('/bookings', verifyJWT, async(req, res) => {
       const email = req.query.email;
       if(!email){
         res.send([]);
       }
 
+      const decodedEmail = req.decoded.email;
+      if(email !== decodedEmail){
+        return res.status(403).send({ error: true, message: 'Forbidden Access'})
+      }
+      
       const query = { email: email };
       const result = await bookingCollection.find(query).toArray();
       res.send(result);
