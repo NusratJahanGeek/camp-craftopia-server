@@ -47,6 +47,8 @@ async function run() {
     const classesCollection = client.db("campCraftopiaDB").collection("classes");
     const instructorsCollection = client.db("campCraftopiaDB").collection("instructors");
     const bookingCollection = client.db("campCraftopiaDB").collection("bookings");
+
+
     // Token Related APIs
 app.post('/jwt', (req, res) => {
   const user = req.body;
@@ -75,6 +77,34 @@ app.post('/jwt', (req, res) => {
       }
       const result = await userCollection.insertOne(user);
       res.send(result);
+    });
+
+    app.get('/users/admin/:email', verifyJWT, async (req, res) => {
+      const email = req.params.email;
+
+      if (req.decoded.email !== email) {
+        return res.status(401).send({ error: true, message: 'Unauthorized Access' });
+      }
+
+      const query = { email: email };
+      const user = await userCollection.findOne(query);
+      const isAdmin = user?.role === 'admin';
+
+      res.send({ admin: isAdmin });
+    });
+
+    app.get('/users/instructor/:email', verifyJWT, async (req, res) => {
+      const email = req.params.email;
+
+      if (req.decoded.email !== email) {
+        return res.status(401).send({ error: true, message: 'Unauthorized Access' });
+      }
+
+      const query = { email: email };
+      const user = await userCollection.findOne(query);
+      const isInstructor = user?.role === 'instructor';
+
+      res.send({ instructor: isInstructor });
     });
 
     app.patch('/users/admin/:id', async(req, res) => {
