@@ -11,14 +11,14 @@ app.use(express.json());
 
 const verifyJWT = (req, res, next) => {
   const authorization = req.headers.authorization;
-  if(!authorization){
-    return res.status(401).send({error: true, message: 'Unauthorized Access'})
+  if (!authorization) {
+    return res.status(401).send({ error: true, message: 'Unauthorized Access' })
   }
   // bearer token
   const token = authorization.split(' ')[1];
 
   jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (err, decoded) => {
-    if(err){
+    if (err) {
       return res.status(401).send({ error: true, message: 'Unauthorized Access' })
     }
     req.decoded = decoded;
@@ -50,30 +50,65 @@ async function run() {
 
 
     // Token Related APIs
-app.post('/jwt', (req, res) => {
-  const user = req.body;
-  try {
-    const token = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, { expiresIn: '1h' });
-    res.send({ token });
-  } catch (error) {
-    console.error('Failed to generate access token:', error);
-    res.status(500).send({ error: true, message: 'Failed to generate access token' });
-  }
-});
+    app.post('/jwt', (req, res) => {
+      const user = req.body;
+      try {
+        const token = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, { expiresIn: '1h' });
+        res.send({ token });
+      } catch (error) {
+        console.error('Failed to generate access token:', error);
+        res.status(500).send({ error: true, message: 'Failed to generate access token' });
+      }
+    });
 
+    const verifyAdmin = async(req, res, next) => {
+      const email = req.decoded.email;
+      const query = {email: email}
+      const user = await userCollection.findOne(query);
+      if(user?.role === 'admin'){
+        next();
+      }
+      else{
+        return res.status(403).send({error: true, message: 'forbidden message'})
+      }
+    }
+
+    const verifyInstructor = async(req, res, next) => {
+      const email = req.decoded.email;
+      const query = {email: email}
+      const user = await userCollection.findOne(query);
+      if(user?.role === 'instructor'){
+        next();
+      }
+      else{
+        return res.status(403).send({error: true, message: 'forbidden message'})
+      }
+    }
+
+    const verifyStudent = async(req, res, next) => {
+      const email = req.decoded.email;
+      const query = {email: email}
+      const user = await userCollection.findOne(query);
+      if(user?.role === 'student'){
+        next();
+      }
+      else{
+        return res.status(403).send({error: true, message: 'forbidden message'})
+      }
+    }
 
     // Users Related APIs
-    app.get('/users', async(req, res) => {
+    app.get('/users', verifyJWT, verifyAdmin, async (req, res) => {
       const result = await userCollection.find().toArray();
       res.send(result);
     })
 
-    app.post('/users', async(req, res) => {
+    app.post('/users', async (req, res) => {
       const user = req.body;
       const query = { email: user.email }
       const existingUser = await userCollection.findOne(query);
-      if(existingUser){
-        return res.send({message: 'User Already Exists'})
+      if (existingUser) {
+        return res.send({ message: 'User Already Exists' })
       }
       const result = await userCollection.insertOne(user);
       res.send(result);
@@ -107,9 +142,9 @@ app.post('/jwt', (req, res) => {
       res.send({ instructor: isInstructor });
     });
 
-    app.patch('/users/admin/:id', async(req, res) => {
+    app.patch('/users/admin/:id', async (req, res) => {
       const id = req.params.id;
-      const filter = {_id: new ObjectId(id)};
+      const filter = { _id: new ObjectId(id) };
       const updateRole = {
         $set: {
           role: 'admin'
@@ -120,9 +155,9 @@ app.post('/jwt', (req, res) => {
       res.send(result);
     });
 
-    app.patch('/users/instructor/:id', async(req, res) => {
+    app.patch('/users/instructor/:id', async (req, res) => {
       const id = req.params.id;
-      const filter = {_id: new ObjectId(id)};
+      const filter = { _id: new ObjectId(id) };
       const updateRole = {
         $set: {
           role: 'instructor'
@@ -133,9 +168,9 @@ app.post('/jwt', (req, res) => {
       res.send(result);
     });
 
-    app.patch('/users/student/:id', async(req, res) => {
+    app.patch('/users/student/:id', async (req, res) => {
       const id = req.params.id;
-      const filter = {_id: new ObjectId(id)};
+      const filter = { _id: new ObjectId(id) };
       const updateRole = {
         $set: {
           role: 'student'
@@ -146,7 +181,7 @@ app.post('/jwt', (req, res) => {
       res.send(result);
     });
 
-    app.delete('/users/:id', async(req, res) => {
+    app.delete('/users/:id', async (req, res) => {
       const id = req.params.id;
       const query = { _id: new ObjectId(id) };
       const result = await userCollection.deleteOne(query);
@@ -154,41 +189,47 @@ app.post('/jwt', (req, res) => {
     })
 
     // Classes Related APIs
-    app.get('/classes', async(req, res) => {
-        const result = await classesCollection.find().toArray();
-        res.send(result);
+    app.get('/classes', async (req, res) => {
+      const result = await classesCollection.find().toArray();
+      res.send(result);
+    });
+
+    app.post('/classes', verifyJWT, verifyInstructor, async (req, res) => {
+      const newClassData = req.body;
+      const result = await classesCollection.insertOne(newClassData);
+      res.send(result);
     })
 
     // Instructors Related APIs
-    app.get('/instructors', async(req, res) => {
-        const result = await instructorsCollection.find().toArray();
-        res.send(result);
-    })
+    app.get('/instructors', async (req, res) => {
+      const result = await instructorsCollection.find().toArray();
+      res.send(result);
+    });
 
     // Bookings Related APIs
-    app.get('/bookings', verifyJWT, async(req, res) => {
+    app.get('/bookings', verifyJWT, async (req, res) => {
       const email = req.query.email;
-      if(!email){
+      if (!email) {
         res.send([]);
       }
 
       const decodedEmail = req.decoded.email;
-      if(email !== decodedEmail){
-        return res.status(403).send({ error: true, message: 'Forbidden Access'})
+      if (email !== decodedEmail) {
+        return res.status(403).send({ error: true, message: 'Forbidden Access' })
       }
-      
+
       const query = { email: email };
       const result = await bookingCollection.find(query).toArray();
       res.send(result);
     });
 
-    app.post('/bookings', async(req, res) => {
+    app.post('/bookings', async (req, res) => {
       const classData = req.body;
       const result = await bookingCollection.insertOne(classData);
       res.send(result);
     });
 
-    app.delete('/bookings/:id', async(req, res) => {
+    app.delete('/bookings/:id', async (req, res) => {
       const id = req.params.id;
       const query = { _id: new ObjectId(id) };
       const result = await bookingCollection.deleteOne(query);
@@ -207,9 +248,9 @@ run().catch(console.dir);
 
 
 app.get('/', (req, res) => {
-    res.send('Camp Craftopia is Running')
+  res.send('Camp Craftopia is Running')
 })
 
 app.listen(port, () => {
-    console.log(`Camp Craftopia is Running On Port: ${port}`)
+  console.log(`Camp Craftopia is Running On Port: ${port}`)
 })
