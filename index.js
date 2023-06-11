@@ -205,17 +205,52 @@ async function run() {
     });
 
     // Classes Related APIs
+    
     app.get('/classes', async (req, res) => {
       const result = await classesCollection.find().toArray();
       res.send(result);
     });
 
+    app.get('/my-classes', async (req, res) => {
+      const email = req.query.email;
+      if (!email) {
+        res.send([]);
+        return;
+      }
+    
+      const query = { email: email };
+      const result = await classesCollection.find(query).toArray();
+      res.send(result);
+    });
+
+    
     app.post('/classes', verifyJWT, verifyInstructor, async (req, res) => {
       const newClassData = req.body;
       const result = await classesCollection.insertOne(newClassData);
       res.send(result);
     });
 
+    app.put('/my-classes/:id', async (req, res) => {
+      const classId = req.params.id;
+      const objectId = new ObjectId(classId);
+      const updatedData = req.body;
+      
+      delete updatedData._id;
+      {
+        const result = await classesCollection.findOneAndUpdate(
+          { _id: objectId },
+          { $set: updatedData },
+          { returnOriginal: false }
+        );
+    
+        if (!result.value) {
+          return res.status(404).json({ error: "Class not found" });
+        }
+    
+        res.json(result.value);
+      }
+    });
+    
     app.delete('/classes/:id', verifyJWT, verifyInstructor, async (req, res) => {
       const id = req.params.id;
       const query = { _id: new ObjectId(id) }
@@ -303,7 +338,6 @@ async function run() {
     
       const updateClassSeatId = payment.bookingId;
       const updateClassData = await classesCollection.findOne({ _id: new ObjectId(updateClassSeatId) });
-      console.log(updateClassData, classId)
       
       if (updateClassData.availableSeats <= 0) {
         return res.status(400).json({ error: true, message: 'No available seats' });
