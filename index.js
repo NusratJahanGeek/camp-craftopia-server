@@ -2,7 +2,8 @@ const express = require('express');
 const app = express();
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
-require('dotenv').config()
+require('dotenv').config();
+const stripe = require('stripe')(process.env.PAYMENT_SECRET_KEY);
 const port = process.env.PORT || 5000;
 
 // middleware
@@ -47,6 +48,7 @@ async function run() {
     const classesCollection = client.db("campCraftopiaDB").collection("classes");
     const instructorsCollection = client.db("campCraftopiaDB").collection("instructors");
     const bookingCollection = client.db("campCraftopiaDB").collection("bookings");
+    const paymentCollection = client.db("campCraftopiaDB").collection("payments");
 
 
     // Token Related APIs
@@ -142,6 +144,20 @@ async function run() {
       res.send({ instructor: isInstructor });
     });
 
+    app.get('/users/student/:email', verifyJWT, async (req, res) => {
+      const email = req.params.email;
+
+      if (req.decoded.email !== email) {
+        return res.status(401).send({ error: true, message: 'Unauthorized Access' });
+      }
+
+      const query = { email: email };
+      const user = await userCollection.findOne(query);
+      const isStudent = user?.role === 'student';
+
+      res.send({ student: isStudent });
+    });
+
     app.patch('/users/admin/:id', async (req, res) => {
       const id = req.params.id;
       const filter = { _id: new ObjectId(id) };
@@ -186,7 +202,7 @@ async function run() {
       const query = { _id: new ObjectId(id) };
       const result = await userCollection.deleteOne(query);
       res.send(result);
-    })
+    });
 
     // Classes Related APIs
     app.get('/classes', async (req, res) => {
@@ -198,7 +214,14 @@ async function run() {
       const newClassData = req.body;
       const result = await classesCollection.insertOne(newClassData);
       res.send(result);
-    })
+    });
+
+    app.delete('/classes/:id', verifyJWT, verifyInstructor, async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) }
+      const result = await classesCollection.deleteOne(query);
+      res.send(result);
+    });
 
     // Instructors Related APIs
     app.get('/instructors', async (req, res) => {
@@ -234,7 +257,32 @@ async function run() {
       const query = { _id: new ObjectId(id) };
       const result = await bookingCollection.deleteOne(query);
       res.send(result);
+    });
+
+    // Payment Related APIs
+ 
+    app.post('/create-payment-intent', verifyJWT, verifyStudent, async(req, res) => {
+      const {price} = req.body;
+      const amount = price * 100;
+      const paymentIntent = await stripe.paymentIntents.create({
+        amount: amount,
+        currency: 'usd',
+        payment_method_types: ['card']
+      });
+      res.send({
+        clientSecret: paymentIntent.client_secret
+      })
+    });
+
+    app.post('/payments', verifyJWT, verifyStudent, async(req, res) => {
+      const payment = req.body;
+      const insertResult = await paymentCollection.insertOne(payment);  
+      const query = {_id: { $in: payment.classId.map(classData => new ObjectId(classData))}}
+      const deleteResult = await bookingCollection.deleteMany(query);   
+      res.send({insertResult, deleteResult});
     })
+
+
 
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
