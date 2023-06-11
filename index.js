@@ -261,6 +261,26 @@ async function run() {
 
     // Payment Related APIs
  
+    app.get('/payments', verifyJWT, verifyStudent, async(req, res) => {
+      const email = req.query.email;
+      if (!email) {
+        res.send([]);
+      }
+
+      const decodedEmail = req.decoded.email;
+      if (email !== decodedEmail) {
+        return res.status(403).send({ error: true, message: 'Forbidden Access' })
+      }
+
+      const query = { email: email };
+
+      const result = await paymentCollection.find(query).toArray();
+      res.send(result);
+    })
+
+
+
+
     app.post('/create-payment-intent', verifyJWT, verifyStudent, async(req, res) => {
       const {price} = req.body;
       const amount = price * 100;
@@ -274,15 +294,46 @@ async function run() {
       })
     });
 
-    app.post('/payments', verifyJWT, verifyStudent, async(req, res) => {
+    app.post('/payments', verifyJWT, verifyStudent, async (req, res) => {
       const payment = req.body;
-      const insertResult = await paymentCollection.insertOne(payment);  
-      const query = {_id: { $in: payment.classId.map(classData => new ObjectId(classData))}}
-      const deleteResult = await bookingCollection.deleteMany(query);   
-      res.send({insertResult, deleteResult});
+      const insertResult = await paymentCollection.insertOne(payment);
+      const classId = payment.classId;
+      const query = { _id: new ObjectId(classId) };
+      const deleteResult = await bookingCollection.deleteOne(query);
+    
+      const updateClassSeatId = payment.bookingId;
+      const updateClassData = await classesCollection.findOne({ _id: new ObjectId(updateClassSeatId) });
+      console.log(updateClassData, classId)
+      
+      if (updateClassData.availableSeats <= 0) {
+        return res.status(400).json({ error: true, message: 'No available seats' });
+      }
+    
+      await classesCollection.updateOne(
+        { _id: new ObjectId(updateClassSeatId) },
+        { $inc: { availableSeats: -1, totalStudents: 1 } }
+      );
+    
+      res.send({ insertResult, deleteResult, updatedSeats: updateClassData.availableSeats });
+    });
+    
+    
+    // Admin Dashboard API
+
+    app.get('/admin-stats', verifyJWT, verifyAdmin, async (req, res) => {
+      const users = await userCollection.estimatedDocumentCount();
+      const classes = await classesCollection.estimatedDocumentCount();
+      const purchases = await paymentCollection.estimatedDocumentCount();
+
+      const payments = await paymentCollection.find().toArray();
+      const revenue = payments.reduce( (sum, entry) => sum + entry.price, 0)
+      res.send({
+        users,
+        classes,
+        purchases,
+        revenue
+      })
     })
-
-
 
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
