@@ -211,7 +211,37 @@ async function run() {
       res.send(result);
     });
 
-    app.get('/my-classes', async (req, res) => {
+      
+    app.post('/classes', verifyJWT, async (req, res) => {
+      const newClassData = req.body;
+      const result = await classesCollection.insertOne(newClassData);
+      res.send(result);
+    });
+
+    app.patch('/classes/:id', async (req, res) => {
+      const id = req.params.id;
+      const filter = { _id: new ObjectId(id) };
+      const { feedback, status } = req.body;
+    
+      const updateFields = {};
+    
+      if (feedback) {
+        updateFields.feedback = feedback;
+      }
+    
+      if (status) {
+        updateFields.status = status;
+      }
+    
+      const updateQuery = {
+        $set: updateFields,
+      };
+    
+      const result = await classesCollection.updateOne(filter, updateQuery);
+      res.send(result);
+    });
+
+    app.get('/my-classes', verifyJWT, async (req, res) => {
       const email = req.query.email;
       if (!email) {
         res.send([]);
@@ -223,14 +253,8 @@ async function run() {
       res.send(result);
     });
 
-    
-    app.post('/classes', verifyJWT, verifyInstructor, async (req, res) => {
-      const newClassData = req.body;
-      const result = await classesCollection.insertOne(newClassData);
-      res.send(result);
-    });
-
-    app.put('/my-classes/:id', async (req, res) => {
+  
+    app.put('/my-classes/:id', verifyJWT, async (req, res) => {
       const classId = req.params.id;
       const objectId = new ObjectId(classId);
       const updatedData = req.body;
@@ -251,12 +275,6 @@ async function run() {
       }
     });
     
-    app.delete('/classes/:id', verifyJWT, verifyInstructor, async (req, res) => {
-      const id = req.params.id;
-      const query = { _id: new ObjectId(id) }
-      const result = await classesCollection.deleteOne(query);
-      res.send(result);
-    });
 
     // Instructors Related APIs
     app.get('/instructors', async (req, res) => {
