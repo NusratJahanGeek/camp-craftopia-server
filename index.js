@@ -179,10 +179,30 @@ async function run() {
           role: 'instructor'
         },
       };
-
+    
       const result = await userCollection.updateOne(filter, updateRole);
-      res.send(result);
+    
+      if (result.modifiedCount === 1) {
+        const instructor = await userCollection.findOne(filter);
+        const approvedClasses = await classesCollection.find({ instructor: instructor.name, status: 'Approved' }).toArray();
+    
+        if (approvedClasses.length > 0) {
+          const instructorData = {
+            userId: id,
+            name: instructor.name,
+            email: instructor.email,
+            image: instructor.photo,
+          };
+          const insertResult = await instructorsCollection.insertOne(instructorData);
+          res.json({ modifiedCount: result.modifiedCount, insertResult });
+        } else {
+          res.json({ modifiedCount: result.modifiedCount, message: 'No approved classes found for this instructor.' });
+        }
+      } else {
+        res.json({ modifiedCount: result.modifiedCount, message: 'Failed to update user role.' });
+      }
     });
+    
 
     app.patch('/users/student/:id', async (req, res) => {
       const id = req.params.id;
